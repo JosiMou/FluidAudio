@@ -2,6 +2,8 @@ import CoreML
 import Foundation
 import os
 
+extension MLMultiArray: @unchecked Sendable {}
+
 /// Thread-safe cache for MLMultiArray instances to reduce allocation overhead
 actor MLArrayCache {
     private var cache: [CacheKey: [MLMultiArray]] = [:]
@@ -94,6 +96,11 @@ actor MLArrayCache {
     func clear() {
         cache.removeAll()
         logger.info("Cache cleared")
+    }
+
+    func cachedArrayCount(shape: [NSNumber], dataType: MLMultiArrayDataType) -> Int {
+        let key = CacheKey(shape: shape.map { $0.intValue }, dataType: dataType)
+        return cache[key]?.count ?? 0
     }
 }
 

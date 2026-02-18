@@ -192,8 +192,8 @@ public final class AsrManager {
         let audioLength = audioSamples.count
         let actualAudioLength = actualLength ?? audioLength  // Use provided actual length or default to sample count
 
-        // Use ANE-aligned array from cache
-        let audioArray = try await sharedMLArrayCache.getArray(
+        // Build a standalone array for callers that only need a feature provider.
+        let audioArray = try MLMultiArray(
             shape: [1, audioLength] as [NSNumber],
             dataType: .float32
         )
@@ -211,6 +211,30 @@ public final class AsrManager {
             ("audio_signal", audioArray),
             ("audio_length", lengthArray),
         ])
+    }
+
+    func preparePooledPreprocessorInput(
+        _ audioSamples: [Float], actualLength: Int? = nil
+    ) async throws -> (provider: MLFeatureProvider, pooledAudioArray: MLMultiArray) {
+        let audioLength = audioSamples.count
+        let actualAudioLength = actualLength ?? audioLength
+
+        let audioArray = try await sharedMLArrayCache.getArray(
+            shape: [1, audioLength] as [NSNumber],
+            dataType: .float32
+        )
+
+        audioSamples.withUnsafeBufferPointer { buffer in
+            let destPtr = audioArray.dataPointer.bindMemory(to: Float.self, capacity: audioLength)
+            memcpy(destPtr, buffer.baseAddress!, audioLength * MemoryLayout<Float>.stride)
+        }
+
+        let lengthArray = try createScalarArray(value: actualAudioLength)
+        let provider = try createFeatureProvider(features: [
+            ("audio_signal", audioArray),
+            ("audio_length", lengthArray),
+        ])
+        return (provider: provider, pooledAudioArray: audioArray)
     }
 
     private func prepareDecoderInput(
